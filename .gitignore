@@ -5,3 +5,8 @@ __pycache__/
 _*.png
 *_test_shot.png
 .DS_Store
+
+# LaTeX build artifacts
+report/*.log
+report/*.aux
+report/*.out
