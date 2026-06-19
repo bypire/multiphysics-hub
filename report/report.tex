@@ -1,0 +1,271 @@
+% ============================================================================
+%  Multiphysics Hub -- technical report
+%  B.Sc. Computational Engineering Science (CES), RWTH Aachen
+%
+%  COMPILE: upload this folder (report.tex + figures/) to Overleaf and press
+%  "Recompile" (pdfLaTeX). Locally: pdflatex report.tex (run twice).
+% ============================================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage[margin=2.3cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{graphicx}
+\usepackage{booktabs}
+\usepackage{siunitx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage[hidelinks]{hyperref}
+\usepackage{xcolor}
+\usepackage{enumitem}
+
+\sisetup{detect-all}
+\graphicspath{{figures/}}
+\captionsetup{font=small,labelfont=bf}
+\setlist{nosep,leftmargin=1.4em}
+
+% --- RWTH house colours -----------------------------------------------------
+\definecolor{rwthblue}{HTML}{00549F}
+\definecolor{rwthblue25}{HTML}{C7DDF2}
+\definecolor{rule}{HTML}{8EBAE5}
+
+% --- header banner (typographic, no logo asset) -----------------------------
+\newcommand{\rwthbanner}{%
+  \noindent\colorbox{rwthblue}{%
+    \parbox{\dimexpr\textwidth-2\fboxsep\relax}{%
+      \vspace{2.5pt}%
+      {\color{white}\textbf{RWTH AACHEN UNIVERSITY}}\hfill
+      {\color{white}\footnotesize Computational Engineering Science}%
+      \vspace{2.5pt}}}%
+  \vspace{1pt}\par\noindent{\color{rule}\rule{\textwidth}{1.3pt}}%
+}
+
+\begin{document}
+
+% ---- title block -----------------------------------------------------------
+\rwthbanner
+\vspace{0.8em}
+
+{\raggedright
+  {\LARGE\bfseries Multiphysics Hub}\\[0.35em]
+  {\large A real-time browser simulation in which one car couples\\
+   vehicle dynamics, aerodynamics, and vehicle--bridge interaction}\\[0.8em]
+  {\normalsize Muhammet Emir Fil}\\[0.15em]
+  {\small B.Sc.\ Computational Engineering Science, RWTH Aachen \quad\textbullet\quad Technical report, \today}\par
+}
+\vspace{0.6em}
+\noindent{\color{rule}\rule{\textwidth}{0.6pt}}
+\vspace{1.0em}
+
+% ---- AIM (before the abstract, as requested) -------------------------------
+\noindent\colorbox{rwthblue25}{%
+  \parbox{\dimexpr\textwidth-2\fboxsep\relax}{%
+  \vspace{3pt}\textbf{Aim.} This project pulls three otherwise separate simulation
+  studies, vehicle dynamics, aerodynamics, and vehicle--bridge interaction, into one
+  real-time application in which a single car couples all three. The wider goal is to
+  show two things at once: that coupled multiphysics can run interactively in a plain
+  web browser, and that such an interactive demo can still be tied to a verified
+  numerical reference instead of drifting into a look-alike animation. Each model is
+  built and checked against ground truth in Python, then re-implemented for the browser
+  and compared back against that Python reference.\vspace{3pt}}}
+
+\vspace{1.0em}
+
+% ---- abstract --------------------------------------------------------------
+\begin{abstract}
+\noindent
+A car is driven in real time around a user-drawn track. As it moves it couples three
+physics models that are recomputed every frame, with no pre-recorded data: a double-track
+(four-wheel) vehicle with Pacejka tyres and load transfer, a 2D fluid solver around the
+car silhouette that returns a drag and a downforce, and a moving-load bridge beam that
+deflects under the wheel force. Each model is first written in numpy and checked against
+an analytical or finite-element reference, then ported to JavaScript for the browser and
+compared against its numpy version on identical inputs (agreement of order $10^{-13}$ for
+the vehicle and $10^{-9}\,$m for the bridge). This report describes the three models, states
+which couplings are physical and which are only illustrative, and gives the verification
+that backs the numbers shown live on screen.
+\end{abstract}
+
+% ---------------------------------------------------------------------------
+\section{Overview}
+% ---------------------------------------------------------------------------
+The wider portfolio contains three standalone, separately verified projects: a
+minimum-lap-time racing-line optimiser, a vehicle--bridge interaction and Bridge
+Weigh-in-Motion simulator, and a Navier--Stokes vortex-street solver. The Multiphysics Hub
+connects them through the object they share, a car, into one real-time top-down application.
+Driving the car runs all three couplings together (Fig.~\ref{fig:hero}): the tyres generate
+the forces, the air flowing past the body adds drag and downforce, and crossing a bridge
+deflects it. The point of the exercise is to keep an interactive, responsive program honest:
+the live readouts are the verified models, not a stand-in.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.95\textwidth]{hub_bridge_shot.png}
+  \caption{The three physics running together. The car crosses the bridge (centre). The aero
+  panel (top right) shows the 2D wake with the current drag and downforce; the bridge panel
+  (bottom) shows the 40\,m span deflecting under the moving load, coloured by bending moment,
+  with $f_1 = 2.60\,$Hz and the dynamic amplification factor; the left panels show the
+  friction-circle state and the per-wheel load transfer. Every value is computed in the
+  current frame.}
+  \label{fig:hero}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{The three models}
+% ---------------------------------------------------------------------------
+
+\subsection{Vehicle: a double-track car with Pacejka tyres}
+The car is a planar double-track (four-wheel) model. Each tyre's lateral force follows the
+Pacejka Magic Formula,
+\begin{equation}
+  F_y = D\,\sin\!\Big(C\,\arctan\!\big(B\alpha - E(B\alpha - \arctan B\alpha)\big)\Big),
+  \qquad D = \mu_\text{eff}(F_z)\,F_z,
+\end{equation}
+and the longitudinal force is friction-ellipse coupled,
+$F_x = \mathrm{thr}\cdot\sqrt{\max\!\big(0,(\mu F_z)^2 - F_y^2\big)}$, so a tyre cannot give
+full grip sideways and lengthways at the same time. The body-frame Newton--Euler equations,
+including the centripetal $v_y r$ and $v_x r$ terms, integrate the state
+$[X,Y,\psi,v_x,v_y,r]$ with RK4. The four wheels carry longitudinal and lateral load transfer,
+and since the tyre's peak friction falls as load rises ($\mu_\text{eff}(F_z)$ concave),
+transfer changes each axle's total grip. That is what produces the car's understeer or
+oversteer balance, set here by the front load-transfer share.
+
+\subsection{Aerodynamics: a 2D fluid around the car}
+A 2D incompressible fluid solver runs around the car silhouette every frame, using Stam's
+stable-fluids scheme (semi-Lagrangian advection with a Gauss--Seidel pressure projection) and
+imposing the body by volume penalisation, the same immersed-boundary idea as in the
+portfolio's Navier--Stokes solver. It draws the wake and, through the standard coefficient
+relation $F = \tfrac12\rho C A V^2$, returns a drag and a downforce that raise the tyre loads;
+at $60\,$m/s the downforce is about $30\,\%$ of the car's weight and lifts the rear-grip cap.
+This panel is labelled qualitative on screen: it is a 2D, model-Reynolds field that shows
+separation and the wake, not a quantitative aerodynamic prediction. The benchmark-verified
+staggered-grid solver is the separate vortex-street project, which the report cites for that
+purpose rather than claiming it here.
+
+\subsection{Bridge: a moving-load modal beam}
+The bridge is a modal reduction of the Euler--Bernoulli moving-load beam from the VBI project:
+the first few mode shapes carry the response, integrated under the travelling wheel force. It
+deflects live under the car, coloured by bending moment, and reports the dynamic amplification
+factor. Two couplings are kept physical and quantitative: aerodynamic downforce changes the
+tyre grip, and the wheel load (including that downforce) deflects the span.
+
+% ---------------------------------------------------------------------------
+\section{Verification}
+% ---------------------------------------------------------------------------
+The interactivity should not cost correctness, so verification runs on two layers. The numpy
+models are the reference and are checked against ground truth; the JavaScript ports that run in
+the browser are then checked against those numpy models on identical inputs. Both integrate at
+a fixed \SI{250}{\hertz} with RK4, decoupled from the render rate.
+
+\paragraph{Layer 1: each model against a reference.} The vehicle is checked against static and
+steady-state references; the bridge against the closed-form static deflection and against the
+independent full Euler--Bernoulli FEM eigensolve from the VBI project; the fluid solver against
+its own conservation properties (Table~\ref{tab:verify}).
+
+\begin{table}[h]
+  \centering
+  \caption{Each model checked against an analytical or FEM reference.}
+  \label{tab:verify}
+  \footnotesize
+  \setlength{\tabcolsep}{5pt}
+  \begin{tabular}{@{}lll@{}}
+    \toprule
+    Check & Reference & Result \\
+    \midrule
+    Static wheel loads (at rest)          & $mg/4$ each                          & exact \\
+    Vertical equilibrium (any $a_x,a_y$)  & $\sum F_z = mg$                      & exact \\
+    Longitudinal / lateral load transfer  & $m|a_x|h/L$,\; $2 s\,m\,a_y h/\text{tr}$ & match closed form \\
+    Low-speed cornering                   & Ackermann $\delta \approx L/R$       & match \\
+    Balance trend                         & more front transfer $\Rightarrow$ wider $R$ & monotonic \\
+    Bridge static mid-span deflection     & $PL^3/48EI$                          & rel.\ err $< 10^{-3}$ \\
+    Bridge modal frequencies              & full VBI Euler--Bernoulli FEM        & within \SI{2}{\percent} ($f_1=2.60$\,Hz) \\
+    Bridge DAF (slow / at speed)          & $\to 1$ quasi-static; bounded $>1$   & confirmed \\
+    Fluid solver                          & divergence drops; stable; sheds a wake & confirmed \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\paragraph{Layer 2: JavaScript against Python.} Each browser model is run against its numpy
+twin on the same inputs (Fig.~\ref{fig:checks}). The vehicle port agrees with Python to order
+$10^{-13}$ over thousands of steps; the bridge crossing agrees to order $10^{-9}\,$m against a
+$0.23\,$mm peak deflection, the residual being transcendental round-off accumulated over the
+ring-down. This is the basis for trusting the live numbers: they are the verified model rather
+than a visual approximation of it.
+
+\begin{figure}[h]
+  \centering
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\linewidth]{xcheck_shot.png}
+    \caption{JavaScript vs Python on identical inputs.}
+  \end{subfigure}\hfill
+  \begin{subfigure}{0.48\textwidth}
+    \includegraphics[width=\linewidth]{aero_test_shot.png}
+    \caption{Fluid-solver self-check (divergence, stability, wake).}
+  \end{subfigure}
+  \caption{Layer-2 verification: the shipped JavaScript is held to the numpy reference.}
+  \label{fig:checks}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{The application}
+% ---------------------------------------------------------------------------
+The page (Fig.~\ref{fig:hub}) opens in a self-driving demo loop and hands control to the user
+on any drive key. It is a top-down circuit with a live minimap, a friction-circle readout,
+per-wheel load bars that grow and redden under transfer, a manual gearbox, handbrake and
+reverse, and an editable track. It runs entirely client-side: open \texttt{index.html}, with no
+server and no build step, and it is deployed on GitHub Pages.
+
+\begin{figure}[h]
+  \centering
+  \includegraphics[width=0.74\textwidth]{hub_shot.png}
+  \caption{The driving view: friction-circle state, per-wheel load transfer, inputs and state,
+  and the minimap, all updated each frame from the verified vehicle model.}
+  \label{fig:hub}
+\end{figure}
+
+% ---------------------------------------------------------------------------
+\section{Limitations}
+% ---------------------------------------------------------------------------
+\begin{itemize}
+  \item The whole model is two-dimensional.
+  \item The aero field is qualitative (2D, model-Reynolds). It drives the car through standard
+        coefficient relations, not through a quantitative pressure integration; the
+        benchmark-verified solver is the separate vortex-street project.
+  \item The bridge is a modal reduction of a simply-supported span, not a continuous multi-span
+        girder. The gearbox is a driver-input layer on top of the vehicle dynamics.
+  \item Coupling is one-way where it is only illustrative (the aero render) and two-way only
+        where it is physical (downforce to grip, wheel load to deflection).
+\end{itemize}
+
+% ---------------------------------------------------------------------------
+\section{Reproducibility}
+% ---------------------------------------------------------------------------
+\begin{sloppypar}
+The models are numpy-only and re-implemented in JavaScript. The checks ship with the code:
+\texttt{verify\_car\_dynamic.py} and \texttt{verify\_doubletrack.py} for the vehicle,
+\texttt{verify\_bridge.py} for the beam (against $PL^3/48EI$ and the full VBI FEM),
+\texttt{web/xcheck.html} for JavaScript versus Python, and \texttt{web/aero\_test.html} for the
+fluid-solver self-check. The application is \texttt{web/index.html}; the live build runs on
+GitHub Pages.
+\end{sloppypar}
+
+% ---------------------------------------------------------------------------
+\begin{thebibliography}{9}
+\small
+\bibitem{pacejka} H.\,B.\ Pacejka, \emph{Tyre and Vehicle Dynamics}, 3rd ed.,
+  Butterworth-Heinemann, 2012. (Magic Formula tyre model.)
+\bibitem{milliken} W.\,F.\ Milliken \& D.\,L.\ Milliken, \emph{Race Car Vehicle Dynamics},
+  SAE International, 1995. (Load transfer and handling balance.)
+\bibitem{stam} J.\ Stam, ``Stable fluids,'' \emph{Proc.\ SIGGRAPH}, 1999.
+  (Semi-Lagrangian advection with pressure projection.)
+\bibitem{angot} P.\ Angot, C.-H.\ Bruneau \& P.\ Fabrie, ``A penalization method to take into
+  account obstacles in incompressible viscous flows,'' \emph{Numerische Mathematik}, 81, 1999.
+\bibitem{clough} R.\,W.\ Clough \& J.\ Penzien, \emph{Dynamics of Structures}, 3rd ed.,
+  Computers \& Structures, 2003. (Modal superposition.)
+\bibitem{fryba} L.\ Frýba, \emph{Vibration of Solids and Structures under Moving Loads},
+  Noordhoff, 1972. (Moving-load reference solution.)
+\end{thebibliography}
+
+\end{document}
