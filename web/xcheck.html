@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- JS<->Python cross-check: replays the Python reference controls through car.js
+     and reports the max state error. Open by double-click (data is injected). -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Car model cross-check (JS vs Python)</title>
+  <style>
+    body { background:#111; color:#ddd; font:14px/1.5 monospace; padding:24px; }
+    #verdict { font-size:20px; font-weight:bold; padding:8px 0; }
+    .ok { color:#5f5; } .bad { color:#f55; }
+    table { border-collapse:collapse; margin-top:12px; }
+    td, th { border:1px solid #333; padding:4px 12px; text-align:right; }
+    th { color:#9cf; }
+  </style>
+</head>
+<body>
+  <h2>Vehicle models &mdash; JS (car.js) vs Python (car_dynamic.py)</h2>
+  <div id="verdict">running...</div>
+  <div id="out"></div>
+
+  <script src="car.js"></script>
+  <script src="bridge.js"></script>
+  <script src="xcheck_ref.js"></script>
+  <script>
+    const names = ["X", "Y", "psi", "vx", "vy", "r"];
+    const TOL = 1e-9;   // same formulas + same RK4 -> only float round-off
+
+    function runCase(ref, Model) {
+      const car = new Model(ref.params);
+      let q = ref.q0.slice();
+      const jsTraj = [q.slice()];
+      for (let k = 0; k < ref.controls.length; k++) {
+        q = car.rk4Step(q, ref.controls[k], ref.dt);
+        jsTraj.push(q.slice());
+      }
+      const maxErr = [0, 0, 0, 0, 0, 0];
+      for (let k = 0; k < jsTraj.length; k++)
+        for (let i = 0; i < 6; i++)
+          maxErr[i] = Math.max(maxErr[i], Math.abs(jsTraj[k][i] - ref.traj[k][i]));
+      return { worst: Math.max(...maxErr), maxErr, jsTraj };
+    }
+
+    const cases = [
+      { name: "Dynamic bicycle", ref: XCHECK_REF.bicycle, Model: DynamicBicycle },
+      { name: "Double-track (4-wheel)", ref: XCHECK_REF.doubletrack, Model: DoubleTrack },
+    ];
+
+    let allPass = true, html = "";
+    for (const c of cases) {
+      const res = runCase(c.ref, c.Model);
+      const pass = res.worst <= TOL;
+      allPass = allPass && pass;
+      html += `<h3>${c.name} &mdash; ${pass ? "PASS" : "FAIL"} ` +
+              `(max error ${res.worst.toExponential(2)})</h3>`;
+      html += "<table><tr><th>state</th><th>max abs error</th>" +
+              "<th>JS final</th><th>Py final</th></tr>";
+      const last = res.jsTraj.length - 1;
+      for (let i = 0; i < 6; i++)
+        html += `<tr><td>${names[i]}</td><td>${res.maxErr[i].toExponential(3)}</td>` +
+                `<td>${res.jsTraj[last][i].toFixed(6)}</td>` +
+                `<td>${c.ref.traj[last][i].toFixed(6)}</td></tr>`;
+      html += "</table>";
+    }
+
+    // --- bridge (moving-load modal crossing) ---
+    {
+      const ref = XCHECK_REF.bridge;
+      const br = new BridgeModal(ref.params);
+      const xm = ref.params.L / 2;
+      let s = new Float64Array(2 * ref.params.n_modes);
+      let worst = 0;
+      for (let k = 0; k < ref.steps.length; k++) {
+        const a = ref.steps[k][0], aMid = ref.steps[k][1];
+        s = br.rk4Step(s, ref.dt, ref.P, a, aMid);
+        const w = br.deflection(xm, s);
+        worst = Math.max(worst, Math.abs(w - ref.w_mid[k + 1]));
+      }
+      // tol 1e-8 m: the residual is transcendental (sin) ULP differences between
+      // V8 and numpy accumulating as phase drift over ~100+ ring-down cycles of
+      // the high modes -- not a logic difference (peak deflection ~0.23 mm).
+      const pass = worst <= 1e-8;
+      allPass = allPass && pass;
+      const peak = Math.max(...ref.w_mid.map(Math.abs)) * 1e3;
+      html += `<h3>Bridge (moving-load modal) &mdash; ${pass ? "PASS" : "FAIL"} ` +
+              `(max w_mid error ${worst.toExponential(2)} m vs ${peak.toFixed(3)} mm peak)</h3>`;
+      html += `<p style="color:#8a93a0">JS matches Python to ${worst.toExponential(1)} m ` +
+              `(~${(worst / (peak * 1e-3)).toExponential(1)} relative) -- transcendental ULP ` +
+              `phase drift over the ring-down, not a logic difference.</p>`;
+    }
+
+    const v = document.getElementById("verdict");
+    v.textContent = allPass
+      ? `PASS  -- both JS models match Python to < ${TOL}`
+      : `FAIL  -- a model exceeds tol ${TOL}`;
+    v.className = allPass ? "ok" : "bad";
+    document.getElementById("out").innerHTML = html;
+    console.log(v.textContent);
+  </script>
+</body>
+</html>

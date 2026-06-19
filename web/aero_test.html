@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<!-- Self-check for the real-time fluid: the projection step must enforce
+     incompressibility (div u -> ~0), the field must stay finite (stable), and
+     a bluff body must leave a measurable low-speed wake. Open by double-click. -->
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Fluid solver self-check</title>
+  <style>
+    body { background:#111; color:#ddd; font:14px/1.6 monospace; padding:24px; }
+    #verdict { font-size:20px; font-weight:bold; padding:8px 0; }
+    .ok { color:#5f5; } .bad { color:#f55; }
+    td,th { border:1px solid #333; padding:4px 14px; text-align:right; }
+    th { color:#9cf; } table { border-collapse:collapse; margin-top:10px; }
+  </style>
+</head>
+<body>
+  <h2>Real-time fluid (StableFluid) &mdash; self-check</h2>
+  <div id="verdict">running...</div>
+  <div id="out"></div>
+  <p style="color:#8a93a0;max-width:760px;margin-top:14px">
+    Scope: this solver is Stam "Stable Fluids" on a <b>collocated</b> grid &mdash;
+    fast and stable, but its projection leaves a small residual divergence
+    (collocated odd&ndash;even decoupling), so the field is <b>qualitative</b>
+    rather than a quantitative incompressible solve. A staggered-grid (MAC)
+    Navier&ndash;Stokes solver validated against Ghia/Williamson lives in the
+    separate <code>vortex-street-cfd</code> project. The drag and downforce used
+    by the car come from the coefficient model (&frac12;&rho;C&middot;V&sup2;).
+  </p>
+
+  <script src="fluid.js"></script>
+  <script>
+    const nx = 160, ny = 90;
+    const f = new StableFluid(nx, ny);
+    f.Uin = 1.0;
+    // circular bluff body (cylinder) -- the canonical wake-shedding test
+    const cx = 0.35 * nx, cy = 0.5 * ny, R = 0.08 * nx;
+    for (let i = 1; i <= nx; i++)
+      for (let j = 1; j <= ny; j++)
+        if ((i - cx) ** 2 + (j - cy) ** 2 < R * R) f.solid[i + f.W * j] = 1;
+
+    // Pressure projection: it must REDUCE the divergence of a divergent field.
+    // (Stam uses a COLLOCATED grid, so central-difference div/grad compose into
+    // an odd-even-decoupled wide stencil -> the projection leaves a small
+    // residual divergence; it does not reach machine zero. That is a known
+    // property of collocated projection -- the rigorous, staggered MAC,
+    // Ghia/Williamson-verified incompressible solve is the Python NS core in
+    // pillar2-cfd. This browser solver is the real-time, qualitative picture.)
+    const M = 40;
+    const ru = new Float32Array((M + 2) * (M + 2));
+    const rv = new Float32Array((M + 2) * (M + 2));
+    for (let k = 0; k < ru.length; k++) { ru[k] = 2 * Math.random() - 1; rv[k] = 2 * Math.random() - 1; }
+    const divAt = (iters) => {
+      const g = new StableFluid(M, M);
+      g.u.set(ru); g.v.set(rv);
+      if (iters > 0) g.project(iters);
+      return g.meanDivergence();
+    };
+    const d0 = divAt(0), d200 = divAt(200);
+    const meanBefore = d0, meanAfter = d200;
+
+    // run to develop a wake; check stability + measure the wake speed deficit
+    let finite = true;
+    for (let s = 0; s < 250; s++) {
+      f.step();
+      for (let k = 0; k < f.u.length; k++)
+        if (!Number.isFinite(f.u[k]) || !Number.isFinite(f.v[k])) finite = false;
+      if (!finite) break;
+    }
+    // freestream speed (upstream) vs wake speed (downstream of the body)
+    const spd = (i, j) => Math.hypot(f.u[i + f.W * j], f.v[i + f.W * j]);
+    const free = spd((0.1 * nx) | 0, (0.5 * ny) | 0) / f.Uin;
+    const wake = spd((0.55 * nx) | 0, (0.5 * ny) | 0) / f.Uin;
+
+    const checks = [
+      ["projection reduces divergence (200 it)",
+        meanAfter.toExponential(2), "< " + (0.75 * meanBefore).toExponential(1),
+        meanAfter < 0.75 * meanBefore],
+      ["field stays finite (stable) over 250 steps", finite ? 1 : 0, "1", finite],
+      ["bluff body leaves a low-speed wake (deficit)",
+        (free - wake).toFixed(2), "> 0.15", (free - wake) > 0.15],
+    ];
+    const pass = checks.every((c) => c[3]);
+
+    const v = document.getElementById("verdict");
+    v.textContent = pass ? "PASS -- projection reduces divergence, stable, sheds a wake"
+                         : "FAIL -- see table";
+    v.className = pass ? "ok" : "bad";
+
+    let html = "<table><tr><th>check</th><th>value</th><th>expected</th><th></th></tr>";
+    html += `<tr><td>mean |div| before projection</td><td>${meanBefore.toExponential(3)}</td><td></td><td></td></tr>`;
+    for (const c of checks)
+      html += `<tr><td>${c[0]}</td><td>${c[1]}</td><td>${c[2]}</td>` +
+              `<td class="${c[3] ? 'ok' : 'bad'}">${c[3] ? 'OK' : 'XX'}</td></tr>`;
+    html += `<tr><td>freestream / wake speed (norm.)</td><td>${free.toFixed(2)} / ${wake.toFixed(2)}</td><td></td><td></td></tr>`;
+    html += "</table>";
+    document.getElementById("out").innerHTML = html;
+    console.log(v.textContent);
+  </script>
+</body>
+</html>

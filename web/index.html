@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Multiphysics Hub &mdash; Phase 1: drive the track</title>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; background: #0d1117; color: #e6edf3;
+      font: 13px/1.5 "Segoe UI", system-ui, sans-serif; overflow: hidden; }
+    #app { display: flex; height: 100vh; }
+
+    /* left control / readout panel */
+    #panel { width: 320px; flex: 0 0 320px; background: #11161d;
+      border-right: 1px solid #222a34; padding: 16px; overflow-y: auto; }
+    #panel h1 { font-size: 16px; margin: 0 0 2px; }
+    #panel .sub { color: #7d8794; font-size: 11px; margin-bottom: 14px; }
+    .card { background: #161c25; border: 1px solid #222a34; border-radius: 8px;
+      padding: 10px 12px; margin-bottom: 12px; }
+    .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .08em;
+      color: #7d8794; margin: 0 0 8px; }
+    .row { display: flex; justify-content: space-between; padding: 2px 0;
+      font-variant-numeric: tabular-nums; }
+    .row .k { color: #9aa4b2; } .row .v { font-weight: 600; }
+    .big { font-size: 28px; font-weight: 700; line-height: 1; }
+    .unit { font-size: 12px; color: #7d8794; font-weight: 400; }
+    .ok { color: #3fb950; } .warn { color: #e7563b; }
+    #gg { display: block; margin: 4px auto 0; background: #0d1117;
+      border-radius: 6px; }
+    button { width: 100%; background: #21262d; color: #e6edf3;
+      border: 1px solid #30363d; border-radius: 6px; padding: 7px; margin: 3px 0;
+      cursor: pointer; font-size: 12px; }
+    button:hover { background: #2a313a; }
+    .keys { color: #7d8794; font-size: 11px; }
+    .keys b { color: #c9d1d9; }
+    #editHint { display: none; color: #e8b339; font-size: 11px; margin-top: 6px; }
+    .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; }
+    .cell { display: flex; justify-content: space-between; background: #0d1117;
+      border: 1px solid #222a34; border-radius: 5px; padding: 4px 8px;
+      font-variant-numeric: tabular-nums; }
+    .cell .lbl { color: #7d8794; }
+    .dtrow { display: flex; align-items: center; gap: 12px; margin-bottom: 6px; }
+    .gearbox { display: flex; flex-direction: column; align-items: center;
+      background: #0d1117; border: 1px solid #30363d; border-radius: 8px;
+      padding: 4px 12px; min-width: 54px; }
+    .gearnum { font-size: 30px; font-weight: 800; line-height: 1; color: #e6edf3; }
+    .tach { height: 8px; background: #0d1117; border: 1px solid #30363d;
+      border-radius: 5px; overflow: hidden; margin-top: 4px; }
+    .tachfill { height: 100%; width: 0%; background: #3fb950; transition: width .05s; }
+
+    /* main stage */
+    #stage { position: relative; flex: 1; overflow: hidden; }
+    #view { position: absolute; inset: 0; width: 100%; height: 100%; }
+    /* bridge: wide strip across the bottom; minimap sits just above it (left) */
+    #bridge { position: absolute; left: 16px; bottom: 16px; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.5); background: #0b1119; }
+    #minimap { position: absolute; left: 16px; bottom: 178px;
+      border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,.5); }
+    #aero { position: absolute; right: 16px; top: 16px; border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0,0,0,.5); background: #081018; }
+    #flash { position: absolute; left: 50%; top: 18px; transform: translateX(-50%);
+      background: rgba(0,0,0,.7); padding: 6px 14px; border-radius: 16px;
+      opacity: 0; transition: opacity .3s; font-size: 12px; }
+    #banner { position: absolute; left: 16px; top: 14px; font-size: 13px;
+      line-height: 1.4; color: #aeb8c4; background: rgba(13,17,23,.78);
+      padding: 9px 13px; border-radius: 8px; max-width: 440px;
+      border: 1px solid #222a34; }
+    #banner b { color: #e6edf3; } #banner i { color: #e8b339; font-style: normal; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <aside id="panel">
+      <h1>Multiphysics Hub</h1>
+      <div class="sub">Phase 1 &middot; double-track (4-wheel) vehicle dynamics,
+        live in the browser &middot; verified vs Python</div>
+
+      <div class="card">
+        <h2>Speed</h2>
+        <div><span id="speed" class="big">0</span> <span class="unit">km/h</span></div>
+        <div class="row"><span class="k">surface</span>
+          <span id="surface" class="v ok">ON TRACK</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Drivetrain</h2>
+        <div class="dtrow">
+          <div class="gearbox"><span id="gear" class="gearnum">1</span>
+            <span class="unit">gear</span></div>
+          <div style="flex:1">
+            <div class="row"><span class="k">RPM</span><span id="rpm" class="v">950</span></div>
+            <div class="tach"><div id="rpmbar" class="tachfill"></div></div>
+          </div>
+        </div>
+        <div class="row"><span class="k">handbrake</span><span id="handbrake" class="v">off</span></div>
+        <div class="keys" style="margin-top:4px"><b>C</b> up &middot;
+          <b>V</b> down &middot; <b>Space</b> handbrake &middot;
+          <b>E</b> reverse (when stopped)</div>
+      </div>
+
+      <div class="card">
+        <h2>g&ndash;g (friction circle)</h2>
+        <canvas id="gg" width="150" height="150"></canvas>
+        <div class="row"><span class="k">grip used</span><span id="grip" class="v">0%</span></div>
+        <div class="row"><span class="k">a_long</span><span id="along" class="v">0.00</span></div>
+        <div class="row"><span class="k">a_lat</span><span id="alat" class="v">0.00</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Inputs &amp; state</h2>
+        <div class="row"><span class="k">throttle</span><span id="throttle" class="v">0%</span></div>
+        <div class="row"><span class="k">brake</span><span id="brake" class="v">0%</span></div>
+        <div class="row"><span class="k">steer</span><span id="steer" class="v">0.0</span><span class="unit">deg</span></div>
+        <div class="row"><span class="k">yaw rate</span><span id="yaw" class="v">0.0</span><span class="unit">deg/s</span></div>
+        <div class="row"><span class="k">slip front</span><span id="slipf" class="v">0.0</span><span class="unit">deg</span></div>
+        <div class="row"><span class="k">slip rear</span><span id="slipr" class="v">0.0</span><span class="unit">deg</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Wheel load (% of static)</h2>
+        <div class="grid2">
+          <div class="cell"><span class="lbl">FL</span><span id="wfl" class="v">100%</span></div>
+          <div class="cell"><span class="lbl">FR</span><span id="wfr" class="v">100%</span></div>
+          <div class="cell"><span class="lbl">RL</span><span id="wrl" class="v">100%</span></div>
+          <div class="cell"><span class="lbl">RR</span><span id="wrr" class="v">100%</span></div>
+        </div>
+        <div class="keys" style="margin-top:6px">Brake &rarr; front loads up;
+          corner &rarr; outer tyres load. Tyres on screen grow/redden with load.</div>
+      </div>
+
+      <div class="card">
+        <h2>Bridge (VBI)</h2>
+        <div class="row"><span class="k">status</span><span id="bstatus" class="v">clear</span></div>
+        <div class="row"><span class="k">mid-span</span><span id="bdefl" class="v">0.000</span><span class="unit">mm</span></div>
+        <div class="row"><span class="k">DAF</span><span id="bdaf" class="v">1.00</span></div>
+      </div>
+
+      <div class="card">
+        <h2>Track</h2>
+        <button id="editBtn">Edit track</button>
+        <div id="editHint">Click empty space = add point &middot; drag = move &middot;
+          right-click = delete. Click <b>Done</b> to drive.</div>
+        <button id="tourBtn">Auto-drive tour: ON</button>
+        <button id="vecBtn">Vectors + trace: off</button>
+        <button id="defaultBtn">Load default circuit</button>
+        <button id="saveBtn">Save track (browser)</button>
+        <button id="loadBtn">Load saved track</button>
+        <button id="resetCarBtn">Reset car (R)</button>
+      </div>
+
+      <div class="card keys">
+        <b>Steer/throttle:</b> Arrows or WASD &middot; <b>C/V</b> gears &middot;
+        <b>Space</b> handbrake &middot; <b>E</b> reverse &middot; <b>R</b> reset<br>
+        Physics: double-track (4-wheel) + Pacejka + load transfer, RK4 @ 250 Hz.<br>
+        Cross-checked vs Python to &lt;1e-13. Gearbox is a driver-input model.
+      </div>
+    </aside>
+
+    <main id="stage">
+      <canvas id="view"></canvas>
+      <canvas id="aero" width="340" height="190"></canvas>
+      <canvas id="bridge" width="900" height="150"></canvas>
+      <canvas id="minimap" width="220" height="150"></canvas>
+      <div id="banner"><b>Drive the car.</b> Real-time dynamic vehicle model
+        &mdash; computed live in the browser.</div>
+      <div id="flash"></div>
+    </main>
+  </div>
+
+  <script src="car.js"></script>
+  <script src="track.js"></script>
+  <script src="fluid.js"></script>
+  <script src="aero.js"></script>
+  <script src="bridge.js"></script>
+  <script src="bridge_render.js"></script>
+  <script src="render.js"></script>
+  <script src="main.js"></script>
+</body>
+</html>
