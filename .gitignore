@@ -1,0 +1,7 @@
+__pycache__/
+*.pyc
+*_shot.png
+*_check.png
+_*.png
+*_test_shot.png
+.DS_Store
