@@ -1,5 +1,7 @@
 # Multiphysics Hub
 
+[![verify](https://github.com/bypire/multiphysics-hub/actions/workflows/verify.yml/badge.svg)](https://github.com/bypire/multiphysics-hub/actions/workflows/verify.yml)
+
 A real-time, top-down driving application in which a single car couples three simulations, all
 computed live in the browser.
 
