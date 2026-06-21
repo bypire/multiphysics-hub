@@ -67,7 +67,7 @@
   real-time application in which a single car couples all three. The wider goal is to
   show two things at once: that coupled multiphysics can run interactively in a plain
   web browser, and that such an interactive demo can still be tied to a verified
-  numerical reference instead of drifting into a look-alike animation. Each model is
+  numerical reference. Each model is
   built and checked against ground truth in Python, then re-implemented for the browser
   and compared back against that Python reference.\vspace{3pt}}}
 
@@ -97,8 +97,7 @@ Weigh-in-Motion simulator, and a Navier--Stokes vortex-street solver. The Multip
 connects them through the object they share, a car, into one real-time top-down application.
 Driving the car runs all three couplings together (Fig.~\ref{fig:hero}): the tyres generate
 the forces, the air flowing past the body adds drag and downforce, and crossing a bridge
-deflects it. The point of the exercise is to keep an interactive, responsive program honest:
-the live readouts are the verified models, not a stand-in.
+deflects it.
 
 \begin{figure}[h]
   \centering
@@ -141,8 +140,7 @@ relation $F = \tfrac12\rho C A V^2$, returns a drag and a downforce that raise t
 at $60\,$m/s the downforce is about $30\,\%$ of the car's weight and lifts the rear-grip cap.
 This panel is labelled qualitative on screen: it is a 2D, model-Reynolds field that shows
 separation and the wake, not a quantitative aerodynamic prediction. The benchmark-verified
-staggered-grid solver is the separate vortex-street project, which the report cites for that
-purpose rather than claiming it here.
+staggered-grid solver is the separate vortex-street project.
 
 \subsection{Bridge: a moving-load modal beam}
 The bridge is a modal reduction of the Euler--Bernoulli moving-load beam from the VBI project:
@@ -154,7 +152,7 @@ tyre grip, and the wheel load (including that downforce) deflects the span.
 % ---------------------------------------------------------------------------
 \section{Verification}
 % ---------------------------------------------------------------------------
-The interactivity should not cost correctness, so verification runs on two layers. The numpy
+Verification runs on two layers. The numpy
 models are the reference and are checked against ground truth; the JavaScript ports that run in
 the browser are then checked against those numpy models on identical inputs. Both integrate at
 a fixed \SI{250}{\hertz} with RK4, decoupled from the render rate.
@@ -191,8 +189,7 @@ its own conservation properties (Table~\ref{tab:verify}).
 twin on the same inputs (Fig.~\ref{fig:checks}). The vehicle port agrees with Python to order
 $10^{-13}$ over thousands of steps; the bridge crossing agrees to order $10^{-9}\,$m against a
 $0.23\,$mm peak deflection, the residual being transcendental round-off accumulated over the
-ring-down. This is the basis for trusting the live numbers: they are the verified model rather
-than a visual approximation of it.
+ring-down.
 
 \begin{figure}[h]
   \centering

@@ -24,12 +24,12 @@ The vehicle and bridge models are checked against analytical and finite-element 
 (`py/verify_*.py`, and `web/xcheck.html` for the JavaScript ports). The aerodynamics panel is a
 two-dimensional, low-Reynolds solver: it illustrates flow separation and the wake but is not a
 quantitative aerodynamic prediction. The drag and downforce used by the vehicle come from the
-standard coefficient relation `F = 0.5 rho C A v^2`; the benchmark-verified Navier-Stokes solver is
+standard coefficient relation `F = 0.5 rho C A v^2`; the Navier-Stokes solver is
 the separate `vortex-street-cfd` project.
 
 ## Verification
 
-The discipline is to keep the live application tied to a verified reference. The numerical models
+The numerical models
 are written in Python (NumPy) and checked against ground truth; the JavaScript ports that run in the
 browser are then checked against those Python models on identical inputs. Both integrate at a fixed
 250 Hz with RK4, decoupled from the render rate.
